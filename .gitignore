@@ -103,3 +103,13 @@ ENV/
 # editor temp files
 *~
 \#*\#
+
+# virtualenv
+bin
+lib
+include
+share
+pip-selfcheck.json
+
+# local stuff
+tmp

@@ -1,5 +1,6 @@
 from webob import Request, Response
 from . import util
+from . import errors
 import pprint
 import piexif
 import tempfile
@@ -40,8 +41,37 @@ class ExifImage:
         
         path = self._json_path()
         
-        with open(path) as fp:
-            json.dump(exif, fp)
+        
+        
+        print(exif)
+        
+        with open(path, "w", encoding="utf-8") as fp:
+            json.dump(exif, fp, cls=util.ExifJSONEncoder)
+        
+    @property
+    def name(self):
+        """
+        Return the name of the file, for downloading later.
+        """
+        return os.path.basename(self.path)
+        
+    @property
+    def json_name(self):
+        """
+        Create a json filename to be served later
+        """
+        name, suffix = os.path.splitext(self.name)
+        
+        return "{}.json".format(name)
+        
+    @property
+    def thumb_name(self):
+        """
+        Create a json filename to be served later
+        """
+        name, suffix = os.path.splitext(self.name)
+        
+        return "{}.thumb{}".format(name, suffix)
         
     def _json_path(self):
         """
@@ -141,13 +171,18 @@ def tempexif(source, id_, tempdir="./tmp"):
             
     return ExifImage(path)
 
-def process(id_, temp_dir):
+def process(id_, temp_dir, loc="info"):
     path = temppath(id_, temp_dir)
     exif = ExifImage(path)
     
     exif.thumb()
     exif.dump()
     exif.clean()
+    
+    return {
+        'thumb': exif.thumb_name,
+        'json': exif.json_name
+    }
 
 def dump_json(id_, temp_dir):
     path = temppath(id_, temp_dir)
@@ -165,17 +200,6 @@ def clean_exif_data(id_, temp_dir):
     
     exif.clean()
 
-def enqueue(queue, id_, connection):
-    """
-    Adds jobs to the queue:
-    
-    1. Extract the thumbnail if present.
-    2. Rotate if necessary.
-    3. Clean out exif data.
-    
-    Returns a list of job objects.
-    """
-
 
 class ExifCleanerService:
     """
@@ -188,7 +212,19 @@ class ExifCleanerService:
     /clean           POST             binary data;        JSON; exif data and temporary link to cleaned file
     """
     
+    def _check_config(self, config):
+        if not os.path.exists(config['temp_dir']):
+            raise errors.ExifCleanerError("Path '{}' does not exist".format(config['temp_dir']))
+    
     def __init__(self, temp_dir="./tmp", redis_url="redis://localhost:6379/0", queue_name="exifcleaner"):
+        config = {
+            'temp_dir': os.path.abspath(temp_dir),
+            'redis_url': redis_url,
+            'queue_name': queue_name
+        }
+        
+        self._check_config(config)
+        
         self.redis = redis.StrictRedis.from_url(redis_url)
         self.queue_name = queue_name
         self.queue = Queue(self.queue_name, connection=self.redis)
@@ -236,11 +272,18 @@ class ExifCleanerService:
     def status(self, request, id_):
         job = self.queue.fetch_job(id_)
         
-        import pdb; pdb.set_trace();
-        
         response = Response()
         
-        response.json_body = job
+        response.json_body = {
+            'ttl': job.ttl,
+            'status': job.status,
+            "is_failed": job.is_failed,
+            "is_finished": job.is_finished,
+            "is_queued": job.is_queued,
+            "is_started": job.is_started,
+            "timeout": job.timeout,
+            "result": job.result
+        }
         
         return response
         
@@ -253,9 +296,7 @@ class ExifCleanerService:
         job = self.queue.enqueue(process, id_=id_, temp_dir=self.temp_dir, job_id=id_)
         
         response = Response()
-        response.content_type = "application/javascript"
-        
-        response.text = id_
+        response.json_body = id_
         
         return response
         

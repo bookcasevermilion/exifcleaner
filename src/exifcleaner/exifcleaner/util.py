@@ -2,6 +2,21 @@
 Utility classes and functions
 """
 from webob import Request, Response
+from json import JSONEncoder
+
+class ExifJSONEncoder(JSONEncoder):
+    """
+    Handle quirks of saving piexif dictionaries as JSON
+    """
+    def default(self, o):
+        if type(o) is bytes:
+            try:
+                return o.decode("utf-8")
+            except UnicodeDecodeError:
+                return "XXXXXXXXX"
+        else:
+            return JSONEncoder.default(self, o)
+    
 
 class BadRequest(Exception):
     """

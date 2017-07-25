@@ -3,12 +3,23 @@
   <head>
     <meta charset="UTF-8">
     <title>EXIF Cleaner</title>
+    <script src="js/jquery-3.2.1.slim.min.js"></script>
+    <script>
+    $(document).ready(function(){
+        $("#go").click(function(){
+            console.log($(this));
+            return false;
+        });
+    });
+    </script>
   </head>
   <body>
   <h1>Remove Exif Data From A JPEG</h1>
-  <form action="/clean" method="post" enctype="multipart/form-data">
-  <input type="file" name="input" />
-  <input type="submit" value="Clean!" />
+  <form id="main" method="post" enctype="multipart/form-data">
+    <input type="file" name="input" />
+    <button id="go">Clean!</button>
   </form>
+  <div id="status"></div>
+  <div id="results"></div>
   </body>
 </html>
