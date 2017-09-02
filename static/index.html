@@ -3,20 +3,207 @@
   <head>
     <meta charset="UTF-8">
     <title>EXIF Cleaner</title>
-    <script src="js/jquery-3.2.1.slim.min.js"></script>
+    <script src="js/jquery-3.2.1.min.js"></script>
     <script>
-    $(document).ready(function(){
-        $("#go").click(function(){
-            console.log($(this));
+    // Variable to store your files
+    var files;
+    
+    // maximum tries
+    var max_tries = 100;
+    // maximum polling interval (miliseconds)
+    var max_interval = 180000;
+    // back-off amount
+    var back_off = 0.8;
+    
+    // polling interval holder
+    var poller = null;
+    
+    // state of the UI
+    var cancelled = false;
+    
+    var max_exceeded = function(args){
+        console.log("Maximum exceeded!");
+    };
+    
+    var cancel = function(event){
+        console.log("Operation cancelled.");
+        event.stopPropagation(); 
+        event.preventDefault();
+        console.log("Current poller id (cancel): "+poller);
+        cancelled = true;
+        clearInterval(poller);
+        submit_mode();
+    };
+    
+    var poll = function(args){
+        /* Poll the given url until it returns an object with a member named is_finished
+           equal to true 
+           
+           args is an object with the following properties: 
+              - url: the url to poll
+              - type: the type of request 
+              - finished: function to call when is_finished is true */
+        
+        // defaults
+        if(!args.tries){
+            args.tries = 1;
+        }
+        
+        if(!args.type){
+            args.type = "GET";
+        }
+        
+        $.ajax({
+            url: args.url,
+            type: args.type,
+            cache: false,
+            dataType: 'json',
+            success: function(data){
+                console.log("Info poll Succeeded. Is Finished? "+data.is_finished);
+                if(data.is_finished){
+                    args.finished(data)
+                } else {
+                    args.tries += 1;
+                    args.interval = 1000*args.tries*back_off;
+                    console.log("Info poll still pending. Waiting "+args.interval);
+                    
+                    if (args.tries > max_tries){
+                        console.log("Max tries exceeded: "+args.tries);
+                        args.data = data;
+                        max_exceeded(args);
+                        return;
+                    }
+                    
+                    if (args.interval > max_interval){
+                        console.log("Max interval reached, resetting: "+args.interval);
+                        args.interval = 1;
+                    }
+                    
+                    if(cancelled){
+                        return;
+                    }
+                    console.log("Current poller id: "+poller);
+                    clearInterval(poller);
+                    poller = setInterval(poll, args.interval, args);
+                    console.log("Current poller id: "+poller);
+                    
+                }
+            },
+            error: error
+        });
+        
+        
+    }
+    
+    var submit_mode = function(){
+        /* convert UI to "ready for input" mode */
+        var button = $("#go");
+        var field = $("#input");
+        
+        field.val("");
+        
+        cancelled = false;
+        
+        button.click(function(event){
+            clean(event);
             return false;
         });
+        
+        button.html("Clean!");
+    };
+    
+    var cancel_mode = function(){
+        /* convert UI to "cancel the pending operation" mode */
+        var button = $("#go");
+        
+        cancelled = false;
+        
+        button.click(function(event){
+            cancel(event);
+            return false;
+        });
+        
+        button.html("Cancel.");
+    };
+    
+    var setup = function(){
+        // Set up handlers and intialize global vars
+        submit_mode();
+        
+        // Grab the files and set them to our variable
+        var prepareUpload = function(event){
+          console.log(event);
+          files = event.target.files;
+        };
+        
+        // Add events
+        $('input[type=file]').on('change', prepareUpload);
+        
+    };
+    
+    var display = function(data, textStatus, jqXHR){
+        console.log(data);
+        
+        
+        submit_mode();
+    };
+    
+    var info = function(id){
+        /* Poll for info for the exif cleaning job */
+        poll({
+            url: "status/"+id,
+            type: "GET",
+            finished: display
+        });                
+    };
+    
+    var success = function(data, textStatus, jqXHR){
+        console.log("Success! Image id: "+data);
+        
+        info(data);
+    };
+    
+    var error = function(jqXHR, textStatus, errorThrown){
+        console.log(textStatus);
+    };
+    
+    var clean = function(event){
+        /* send the image to be cleaned */
+        event.stopPropagation(); 
+        event.preventDefault(); 
+        
+        cancel_mode();
+
+        // START A LOADING SPINNER HERE
+
+        // Create a formdata object and add the files
+        var data = new FormData();
+        data.append("input", files[0]);
+        
+        console.log(data);
+        $.ajax({
+            url: 'clean/',
+            type: 'POST',
+            data: data,
+            cache: false,
+            dataType: 'json',
+            processData: false, // Don't process the files
+            contentType: false, // Set content type to false as jQuery will tell the server its a query string request
+            success: success,
+            error: error
+        });
+        
+    };
+    
+    $(document).ready(function(){
+        setup();
     });
     </script>
   </head>
   <body>
   <h1>Remove Exif Data From A JPEG</h1>
   <form id="main" method="post" enctype="multipart/form-data">
-    <input type="file" name="input" />
+    <input type="file" id="input" />
     <button id="go">Clean!</button>
   </form>
   <div id="status"></div>

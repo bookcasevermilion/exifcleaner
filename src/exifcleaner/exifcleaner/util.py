@@ -3,6 +3,34 @@ Utility classes and functions
 """
 from webob import Request, Response
 from json import JSONEncoder
+import pprint
+import piexif
+
+def info(request):
+    """
+    Return a string containing all of the exif data. Assumes file upload field 
+    is called 'input'
+    """
+    response = Response()
+    
+    data = piexif.load(request.POST['input'].file.read())
+    
+    response.content_type = "text/plain"
+    response.text = pprint.pformat(data)
+    
+    return response
+
+def dump_request(request):
+    """
+    Create a response that contains the request info in its body.
+    """
+    response = Response()
+    response.content_type = "text/plain"
+    response.text = pprint.pformat(request.environ)
+    response.text += "\n\n------------------\n\n"
+    response.text += pprint.pformat(dir(request))
+    
+    return response
 
 class ExifJSONEncoder(JSONEncoder):
     """
@@ -17,7 +45,6 @@ class ExifJSONEncoder(JSONEncoder):
         else:
             return JSONEncoder.default(self, o)
     
-
 class BadRequest(Exception):
     """
     WSGI App/Exception hybrid. 
@@ -35,6 +62,27 @@ class BadRequest(Exception):
         
     def __call__(self, environ, start_response):
         response = Response(self.msg, status=self.code)
+        return response(environ, start_response)
+        
+class JSONErrorResponse(Exception):
+    """
+    Generic WSGI/Exception hybrid for JSON errors that have information in the
+    body.
+    """
+    
+    def __init__(self, errorno, extra=None, code=400):
+        self.errorno = errorno
+        self.extra = extra
+        self.code = code
+        
+    def __call__(self, environ, start_response):
+        response = Response(status=self.code)
+        
+        response.json_body = {
+            'error': self.errorno,
+            'extra': self.extra
+        }
+        
         return response(environ, start_response)
     
 class NotFound(BadRequest):

@@ -1,23 +1,29 @@
 import pkg_resources
 import random
 
-def load(db):
-    resource_package = __name__
-    resource_path = '/'.join(('dict', db))
-    
-    words = pkg_resources.resource_stream(resource_package, resource_path)
-    
+def load(path):
+    """
+    Load a dictionary file from a given open file pointer, process into a pre-shuffled list
+    of capitalized words.
+    """
     output = []
     
-    for line in words:
-        # two per line for some reason
-        parts = [x.capitalize() for x in line.decode("utf-8").strip().split(" ")]
-        
-        output.extend(parts)
-        
-    random.shuffle(output)
+    with open(path, 'r') as fp:
+        for word in fp:
+            output.append(word.strip().capitalize())
+            
+        random.shuffle(output)
         
     return output
+    
+def local_db_path(filename):
+    """
+    Locate a bundled word list by name (in the dict/ diectory)
+    """
+    resource_package = __name__
+    resource_path = '/'.join(('dict', filename))
+    
+    return pkg_resources.resource_filename(resource_package, resource_path)
 
 def cycle(words):
     """
@@ -25,17 +31,32 @@ def cycle(words):
     
     Cycles around back to the beginning when the end of the list is reached.
     """
-    for word in words:
-        yield word
+    while True:
+        for word in words:
+            yield word
     
 
 class Englids:
     
-    def __init__(self):
-        self.nouns = load('noun.exc')
-        self.verbs = load('verb.exc')
-        self.adjectives = load('adj.exc')
+    def __init__(self, nouns=None, verbs=None, adjectives=None):
+        """
+        nouns: file path. If provided, used as the source of nouns.
+        verbs: file path. If passed, used as the source of verbs.
+        adjectives: file path. If passed, used as the source of adjectives.
+        """
+        if nouns is None:
+            nouns = local_db_path('noun.exc')
+        if verbs is None:
+            verbs = local_db_path('verb.exc')
+        if adjectives is None:
+            adjectives = local_db_path('adj.exc')
         
+        self.nouns = load(nouns)
+                
+        self.verbs = load(verbs)
+                
+        self.adjectives = load(adjectives)
+            
         self._noun = cycle(self.nouns)
         self._verb = cycle(self.verbs)
         self._adjective = cycle(self.adjectives)
