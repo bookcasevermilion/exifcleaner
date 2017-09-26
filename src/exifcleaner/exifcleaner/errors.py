@@ -22,3 +22,9 @@ class ExifCleanerNotAJPEG(ExifCleanerError):
     """
     Raised when the file uploaded is not a JPEG.
     """
+    
+class ExifCleanerInputError(ExifCleanerError):
+    """
+    Generic class for any input errors
+    """
+    

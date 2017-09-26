@@ -15,6 +15,7 @@ import json
 import datetime
 from datetime import timedelta
 from .image import ExifImage, tempexif
+from .activation import ActivationService
 
 
 class ExifCleanerService:

@@ -71,9 +71,10 @@ if wait.lower() in ['y']:
     print("Waiting 12 minutes for the image and related files to be removed...", end='', flush=True)
     elapsed = datetime.timedelta(0)
     start = datetime.datetime.now()
-    while elapsed.seconds < 60*60*12:
+    while elapsed.seconds < 60*12:
         time.sleep(5)
-        print(".", end="", flush=True)
+        # print(".", end="", flush=True)
+        print(elapsed.seconds)
         now = datetime.datetime.now()
         elapsed = now - start
         

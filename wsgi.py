@@ -1,4 +1,4 @@
-from exifcleaner import ExifCleanerService
+from exifcleaner import ExifCleanerService, ActivationService
 from webob.static import DirectoryApp
 import re
 
@@ -6,6 +6,8 @@ static = DirectoryApp("./static")
 data = DirectoryApp("./tmp")
 
 cleaner = ExifCleanerService()
+
+activation = ActivationService()
 
 def app(environ, start_response):
     print("FIRST", environ['PATH_INFO'])
@@ -16,3 +18,4 @@ def app(environ, start_response):
         return data(environ, start_response)
     else:
         return static(environ, start_response)
+
