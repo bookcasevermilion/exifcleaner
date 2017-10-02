@@ -1,6 +1,20 @@
 from webob import Request, Response
 from wsgiref.util import request_uri, guess_scheme, application_uri
 from urllib.parse import urljoin
+import piexif
+import pprint
+
+def dump_request(request):
+    """
+    Create a response that contains the request info in its body.
+    """
+    response = Response()
+    response.content_type = "text/plain"
+    response.text = pprint.pformat(request.environ)
+    response.text += "\n\n------------------\n\n"
+    response.text += pprint.pformat(dir(request))
+    
+    return response
 
 class BadRequest(Exception):
     """
@@ -79,4 +93,18 @@ class JSONError(BadRequest):
         res.json_body = output
         
         return res(environ, start_response)
+    
+def info(request):
+    """
+    Return a string containing all of the exif data. Assumes file upload field 
+    is called 'input'
+    """
+    response = Response()
+    
+    data = piexif.load(request.POST['input'].file.read())
+    
+    response.content_type = "text/plain"
+    response.text = pprint.pformat(data)
+    
+    return response
     

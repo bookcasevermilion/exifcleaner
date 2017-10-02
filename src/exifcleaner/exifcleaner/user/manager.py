@@ -3,55 +3,30 @@ Alternate User Manager
 """
 
 import redis
-from schema import Schema, And, Use, Optional
 import udatetime
 import datetime
 from passlib.hash import pbkdf2_sha256
 from . import errors
-from .. import util
+from ..util import UNSET, string_to_score, random_id
+import simpleschema
 
 USER_INDEX_KEY = "index:users-main"
 USERS_BY_USERNAME = "index:users:by-username"
 
-def if_none_generate_id(value):
-    if value is None or "":
-        return util.random_id()
-    else:
-        return value
-
-add_schema = Schema({
-    "email": str,
-    Optional('admin', default=False): And(Use(util.bool_from_string), bool),
-    Optional('activated', default=False): And(Use(util.bool_from_string), bool),
-    Optional('enabled', default=False): And(Use(util.bool_from_string), bool),
-    Optional('id'): str,
-    "username": And(str, util.too_long),
-    "password": And(str, util.too_long),
-    # TODO: this is wrong - the default time is not right.
-    Optional('joined', default=udatetime.now()): And(Use(util.datetime_from_string), datetime.datetime)
+schema = simpleschema.Schema({
+    'email': simpleschema.fields.EmailField(),
+    'password': simpleschema.fields.StringField(),
+    'username': simpleschema.fields.StringField(),
+    'admin': simpleschema.fields.BooleanField(default=False),
+    'activated': simpleschema.fields.BooleanField(default=False),
+    'enabled': simpleschema.fields.BooleanField(default=False),
+    'id': simpleschema.fields.StringField(default=random_id),
+    'joined': simpleschema.fields.RFC3339DateField(default=udatetime.now)
 })
 
-modify_schema = Schema({
-    Optional("email"): str,
-    Optional('admin'): And(Use(util.bool_from_string), bool),
-    Optional('activated'): And(Use(util.bool_from_string), bool),
-    Optional('enabled'): And(Use(util.bool_from_string), bool),
-    Optional('id'): str,
-    Optional("username"): And(str, util.too_long),
-    Optional("password"): And(str, util.too_long),
-    Optional('joined'): And(Use(util.datetime_from_string), datetime.datetime)
-})
+modify_schema = simpleschema.FlexiSchema(schema)
 
-redis_schema = Schema({
-    "email": str,
-    'admin': And(Use(util.bool_from_string), bool),
-    'activated': And(Use(util.bool_from_string), bool),
-    'enabled': And(Use(util.bool_from_string), bool),
-    'id': str,
-    "username": And(str, util.too_long),
-    "password": And(str, util.too_long),
-    'joined': And(Use(util.datetime_from_string), datetime.datetime)
-})
+redis_schema = simpleschema.RigidSchema(schema)
 
 class User:
     """
@@ -61,24 +36,25 @@ class User:
     strcutre
     """
     
-    def __init__(self, **attributes):
+    def __init__(self, skip_check=False, **attributes):
         """
         Create a user object. 
         """
         self._old = {
-            "email": util.UNSET,
-            'admin': util.UNSET,
-            'activated': util.UNSET,
-            'enabled': util.UNSET,
-            'id': util.UNSET,
-            "username": util.UNSET,
-            "password": util.UNSET,
-            'joined': util.UNSET
+            "email": UNSET,
+            'admin': UNSET,
+            'activated': UNSET,
+            'enabled': UNSET,
+            'id': UNSET,
+            "username": UNSET,
+            "password": UNSET,
+            'joined': UNSET
         }
         
-        # parsed_attributes = modify_schema.validate(attributes)
+        if not skip_check:
+            attributes = schema.check(attributes)
         
-        self.update(**attributes)
+        self._update(**attributes)
     
     def old(self, attr):
         """
@@ -92,10 +68,10 @@ class User:
         they are applied.
         """
         if not attr.startswith("_"):
-            try:
-                self._old[attr] = getattr(self, attr)
-            except AttributeError:
-                self._old[attr] = util.UNSET
+            prev = getattr(self, attr, UNSET)
+            
+            if prev is not UNSET and value != prev:
+                self._old[attr] = prev
             
         object.__setattr__(self, attr, value)
     
@@ -105,7 +81,7 @@ class User:
         """
         changed = []
         for key, value in self._old.items():
-            if value is not util.UNSET and getattr(self, key) != value:
+            if value is not UNSET and getattr(self, key) != value:
                 changed.append(key)
                 
         return changed
@@ -123,9 +99,6 @@ class User:
         
     @password.setter
     def password(self, value):
-        """
-        Overload the setter for password so only a hash is stored inside the object.
-        """
         self._password = pbkdf2_sha256.hash(value)
     
     def _update(self, **attributes):
@@ -140,7 +113,7 @@ class User:
         """
         Update and verify attributes supplied as keyword arguments.
         """
-        data = modify_schema.validate(attributes)
+        data = modify_schema.validict(attributes)
         self._update(**data)
     
     @classmethod
@@ -148,13 +121,13 @@ class User:
         """
         Construct a User object from a dictionary retrieved from Redis.
         """
-        data = redis_schema.validate(data)
+        data = redis_schema.check(data)
         
         # password is already encrypted, bypass setter.
         password = data['password']
         del data['password']
         
-        obj = cls(**data)
+        obj = cls(skip_check=True, **data)
         obj._password = password
         
         return obj
@@ -179,7 +152,7 @@ class User:
         output['activated'] = int(self.activated)
         
         # double check if the data is legit
-        redis_schema.validate(output)
+        redis_schema.check(output)
         
         return output
         
@@ -223,7 +196,7 @@ class UserManager:
             if "username" in user.changed():
                 pipe.hdel(USER_INDEX_KEY, user.old("username"))
                 
-            pipe.zadd(USERS_BY_USERNAME, util.string_to_score(user.username), user.key)
+            pipe.zadd(USERS_BY_USERNAME, string_to_score(user.username), user.key)
             pipe.hset(USER_INDEX_KEY, user.username, user.key)
             pipe.execute()
         
@@ -232,7 +205,7 @@ class UserManager:
         Create a new User in the database.
         """
         if "id" not in attributes:
-            attributes['id'] = util.random_id()
+            attributes['id'] = random_id()
         
         data = add_schema.validate(attributes)
         

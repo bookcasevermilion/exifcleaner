@@ -23,12 +23,32 @@ def password_check(value):
     else:
         raise BadPassword()
 
-class TestBasicSchema(unittest.TestCase):
+class TestSchemaBase(unittest.TestCase):
+    def compare_lists(self, output, expected):
+        """
+        Verify that all of the members of output match whats in expected.
+        
+        If a member of expected is a class, verify that the corresponding member
+        of output is of that type.
+        """
+        for index, value in enumerate(expected):
+            subject = output[index]
+            
+            if inspect.isclass(value):
+                self.assertTrue(isinstance(subject, value))
+            else:
+                self.assertEqual(subject, value)
     
-    def _date(self):
+    def static_date(self):
+        """
+        Return a known datetime object.
+        """
         return udatetime.from_string('1993-10-26T08:00:00-04:00')
         
-    def _dict(self, generator):
+    def validate_to_dict(self, generator):
+        """
+        Convert the output of Schema.validate into a dictionary.
+        """
         return dict([x for x in generator])
         
     def compare_errors(self, schema_output, expected):
@@ -39,7 +59,7 @@ class TestBasicSchema(unittest.TestCase):
         instead of checking for equilivence, we instead ensure the value in the
         validator result is an instance of that class.
         """
-        for field, result in schema_output:
+        for field, result in schema_output.items():
             test = expected[field]
             
             if inspect.isclass(test):
@@ -48,7 +68,7 @@ class TestBasicSchema(unittest.TestCase):
                 self.assertEqual(test, result)
         
     
-    def _schema(self):
+    def schema(self):
         """
         Construct a non-trivial test schema.
         """
@@ -58,15 +78,18 @@ class TestBasicSchema(unittest.TestCase):
         schema['username'] = simpleschema.fields.StringField(min=10, max=40)
         schema['password'] = simpleschema.fields.StringField(min=5, validator=password_check)
         schema['active'] = simpleschema.fields.BooleanField(default=True)
-        schema['last-visit'] = simpleschema.fields.RFC3339DateField(default=self._date)
+        schema['last-visit'] = simpleschema.fields.RFC3339DateField(default=self.static_date)
         
         return schema
+    
+
+class TestBasicSchema(TestSchemaBase):
     
     def test_happy_path_all_good(self):
         """
         Typical use case example - no errors
         """
-        schema = self._schema()
+        schema = self.schema()
         
         data = {
             'email': "none@donthave.com",
@@ -84,26 +107,193 @@ class TestBasicSchema(unittest.TestCase):
             'last-visit': udatetime.from_string(data['last-visit'])
         }
         
-        self.assertEqual(self._dict(schema.validate(data)), expected)
+        self.assertEqual(schema.validict(data), expected)
         
     def test_happy_path_no_values(self):
         """
         Typical use case example - no values provided.
         """
-        schema = self._schema()
+        schema = self.schema()
         
         expected = {
             'username': simpleschema.errors.MissingValue,
             'password': simpleschema.errors.MissingValue,
             'email': simpleschema.errors.MissingValue,
             'active': True,
-            'last-visit': self._date()
+            'last-visit': self.static_date()
         }
         
-        self.compare_errors(schema.validate({}), expected)
+        self.compare_errors(schema.validict({}), expected)
                 
                 
-class TestSchemaFieldBase(TestBasicSchema):
+    def test_check_method_no_errors(self):
+        schema = self.schema()
+        
+        data = {
+            'email': "none@donthave.com",
+            'password': "NCQurep@ssw0rd",
+            'active': False,
+            'username': "myusername",
+            'last-visit': '2001-09-26T08:00:00-04:00'
+        }
+        
+        expected = {
+            'username': "myusername",
+            'email': "none@donthave.com",
+            'password': "NCQurep@ssw0rd",
+            'active': False,
+            'last-visit': udatetime.from_string(data['last-visit'])
+        }
+        
+        self.assertEqual(schema.validict(data), expected)
+                
+    def test_check_method_errors(self):
+        """
+        When running the Schema.check() method with improper data, 
+        it should raise SchemaError.
+        """
+        schema = self.schema()
+        
+        self.assertRaises(simpleschema.SchemaError, schema.check, {})
+    
+    def test_check_method_errors_verify(self):
+        """
+        Verify that SchemaError has the expected errors within it.
+        """
+        schema = self.schema()
+        
+        expected = {
+            'username': simpleschema.errors.MissingValue,
+            'password': simpleschema.errors.MissingValue,
+            'email': simpleschema.errors.MissingValue
+        }
+        
+        try:
+            schema.check({})
+        except simpleschema.SchemaError as e:
+            self.compare_errors(e.errors, expected)
+
+class TestRigidSchema(TestSchemaBase):
+    """
+    Test the RigidSchema class
+    """
+    
+    def test_happy_path(self):
+        """
+        Typical use case, no errors.
+        """
+        schema = simpleschema.RigidSchema(self.schema())
+        
+        data = {
+            'email': "none@donthave.com",
+            'password': "NCQurep@ssw0rd",
+            'active': "0",
+            'username': "myusername",
+            'last-visit': '2001-09-26T08:00:00-04:00'
+        }
+        
+        expected = {
+            'username': "myusername",
+            'email': "none@donthave.com",
+            'password': "NCQurep@ssw0rd",
+            'active': False,
+            'last-visit': udatetime.from_string(data['last-visit'])
+        }
+        
+        self.assertEqual(schema.validict(data), expected)
+        
+    def test_happy_path_errors(self):
+        """
+        Typical use case, but values are omitted, and errors are present.
+        """
+        schema = simpleschema.RigidSchema(self.schema())
+        
+        data = {
+            'username': "myusername",
+            'password': "NCQurepsswrd",
+            'active': "0"
+        }
+        
+        expected = {
+            'username': "myusername",
+            'password': BadPassword,
+            'active': False,
+            'last-visit': simpleschema.errors.MissingValue,
+            'email': simpleschema.errors.MissingValue
+        }
+        
+        self.compare_errors(schema.validict(data), expected)   
+
+    def test_no_values(self):
+        """
+        All values omitted.
+        """
+        schema = simpleschema.RigidSchema(self.schema())
+        
+        expected = {
+            'username': simpleschema.errors.MissingValue,
+            'password': simpleschema.errors.MissingValue,
+            'active': simpleschema.errors.MissingValue,
+            'last-visit': simpleschema.errors.MissingValue,
+            'email': simpleschema.errors.MissingValue
+        }
+        
+        self.compare_errors(schema.validict({}), expected)  
+
+class TestFlexiSchema(TestSchemaBase):
+    """
+    Test the FlexiSchema class
+    """
+    
+    def test_happy_path(self):
+        """
+        Typical use case, some values omitted.
+        """
+        schema = simpleschema.FlexiSchema(self.schema())
+        
+        data = {
+            'username': "myusername",
+            'password': "NCQurep@ssw0rd",
+            'active': False
+        }
+        
+        expected = {
+            'username': "myusername",
+            'password': "NCQurep@ssw0rd",
+            'active': False,
+        }
+        
+        self.assertEqual(schema.validict(data), expected)
+        
+    def test_happy_path_errors(self):
+        """
+        Typical use case, errors, but values are omitted.
+        """
+        schema = simpleschema.FlexiSchema(self.schema())
+        
+        data = {
+            'username': "myusername",
+            'password': "NCQurepsswrd",
+            'active': False
+        }
+        
+        expected = {
+            'username': "myusername",
+            'password': BadPassword,
+            'active': False,
+        }
+        
+        self.compare_errors(schema.validict(data), expected)   
+
+    def test_no_values(self):
+        """
+        All values omitted.
+        """
+        schema = simpleschema.FlexiSchema(self.schema())
+        
+        self.assertEqual(schema.validict({}), {})  
+
+class TestSchemaFieldBase(TestSchemaBase):
     """
     Test functionality of the SchemaField base class.
     """
@@ -258,28 +448,10 @@ class TestSchemaFieldBase(TestBasicSchema):
         
         self.assertEqual(field("whatever"), "lower")
         
-class TestDelimitedListField(TestBasicSchema):
+class TestDelimitedListField(TestSchemaBase):
     """
     Test the DelimitedListField.
     """
-    
-    def compare_lists(self, output, expected):
-        """
-        Verify that all of the members of output match whats in expected.
-        
-        If a member of expected is a class, verify that the corresponding member
-        of output is of that type.
-        """
-        print("EXPECTED:", expected)
-        print("OUTPUT:", output)
-        for index, value in enumerate(expected):
-            subject = output[index]
-            
-            if inspect.isclass(value):
-                self.assertTrue(isinstance(subject, value))
-            else:
-                self.assertEqual(subject, value)
-        
     
     def typical(self, **params):
         """
@@ -387,3 +559,16 @@ class TestDelimitedListField(TestBasicSchema):
         expected = [1, 2, 3, 4, simpleschema.errors.BadType]
         
         self.compare_lists(field(data), expected)
+        
+class TestBooleanField(TestSchemaFieldBase):
+    
+    def test_default(self):
+        """
+        Ensure that when a default is set, it is used.
+        """
+        field = simpleschema.fields.BooleanField(default=False)
+        
+        self.assertEqual(field(), False)
+        
+      
+    

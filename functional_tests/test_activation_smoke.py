@@ -93,4 +93,24 @@ for i in range(34):
         data={"username": "user1"})
     print("\t{}:{}".format(i, r.text))
     
+print("Getting the first page of codes")
+r = requests.get(BASE_URL+"/activations?per-page=10", auth=HTTPBasicAuth("admin", "xxxx"))
+data = r.json()
 
+print("\tLength:", len(data['activations']))
+print("\tPagination:", data['pagination'])
+print()
+print("\tGetting the rest of the codes:")
+while data['pagination'].get("next"):
+    r = requests.get(data['pagination']['next'], auth=HTTPBasicAuth("admin", "xxxx"))
+    data = r.json()
+    print("\t\tLength:", len(data['activations']))
+    print("\t\tPagination:", data['pagination'])
+    
+print("")
+print("\tGoing backwards:")
+while data['pagination'].get("previous"):
+    r = requests.get(data['pagination']['previous'], auth=HTTPBasicAuth("admin", "xxxx"))
+    data = r.json()
+    print("\t\tLength:", len(data['activations']))
+    print("\t\tPagination:", data['pagination'])

@@ -8,15 +8,6 @@ from ..user.errors import UserNotFound
 from webob import Request, Response
 import base64
 import re
-from schema import Schema, Optional, And, Use, SchemaError
-
-def str_to_int(value):
-    return int(value)
-
-pagination = Schema({
-   Optional("per-page", default=20): And(Use(str_to_int), lambda x: 0 < x < 100, int, error=1201),
-   Optional("page", default=1): And(Use(str_to_int), lambda x: x > 0, int, error=1202)
-})
 
 class ActivationService:
     """
@@ -134,42 +125,21 @@ class ActivationService:
     def listing(self, request):
         self.authorize(request, admin=True)
         
-        try:
-            nav = pagination.validate(request.GET.mixed())
-        except SchemaError as e:
-            import ipdb; ipdb.set_trace()
-            raise
+        nav = util.pagination.nav(request, self.manager.count())
         
-        print(nav)
+        data = self.manager.activations(start=nav['start'], stop=nav['end'])
         
-        per_page = nav['per-page']
-        page = nav['page']
-        
-        start = (page*per_page) - per_page
-        end = (page*per_page) - 1
-        
-        count = self.manager.count()
-        
-        next = page + 1
-        previous = page - 1
-        
-        if end > count:
-            next = None
-        
-        if page == 1:
-            previous = None
-        
-        data = self.manager.activations(start=start, stop=end)
+        del nav['start']
+        del nav['end']
         
         response = Response()
         
+        base_url = util.web.request_uri(request.environ)
+        print("BASE:",base_url)
+        
         output = {
             'activations': [],
-            'pagination': {
-                'count': count,
-                'previous': previous,
-                'next': next
-            }
+            'pagination': nav
         }
         
         for act in data:

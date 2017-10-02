@@ -4,122 +4,149 @@ User manager tests
 
 import unittest
 from unittest.mock import patch
-from exifcleaner.user import User, errors
+# from exifcleaner.user import errors
+from simpleschema import errors
+from exifcleaner.user.manager import User
 import udatetime
+import random
+
+def static_date(*args, **kwargs):
+    """
+    Return a known datetime object.
+    """
+    return udatetime.from_string('1993-10-26T08:00:00-04:00')
+
+def static_id(*args, **kwargs):
+    return "1234"
 
 class TestUserClass(unittest.TestCase):
+    """
+    Test the User class.
+    """
+    def setUp(self):
+        import exifcleaner.user.manager
+        
+        self._old = {}
+        
+        self._old['id'] = exifcleaner.user.manager.schema['id'].default
+        self._old['joined'] = exifcleaner.user.manager.schema['joined'].default
+        
+        exifcleaner.user.manager.schema['id'].default = static_id
+        exifcleaner.user.manager.schema['joined'].default = static_date
     
-    def test_validation_no_attributes(self):
-        """
-        New user object, no attributes provided, check that all errors are returned.
-        """
+    def tearDown(self):
+        import exifcleaner.user.manager
         
-        user = User()
-        
-        expected = [
-            errors.ExifCleanerUsernameMissing,
-            errors.ExifCleanerPasswordMissing,
-            errors.ExifCleanerEmailMissing
-        ]
-        
-        e = user.update()
-        
-        self.assertEqual(len(e), 3)
-        self.assertTrue(e[0].__class__ in expected)
-        self.assertTrue(e[1].__class__ in expected)
-        self.assertTrue(e[2].__class__ in expected)
+        exifcleaner.user.manager.schema['id'].default = self._old['id']
+        exifcleaner.user.manager.schema['joined'].default = self._old['joined']
     
-    def test_user_validation_everything_is_wrong(self):
+    @patch("exifcleaner.user.manager.pbkdf2_sha256.hash", lambda x: "did it")
+    def test_happy_path(self):
         """
-        Pass nothing but malformed data to the update method.
+        Populate a User object - typical use case, no errors
         """
-        user = User()
         
-        expected = [
-            errors.ExifCleanerJoinedMalformed,
-            errors.ExifCleanerActivatedMalformed,
-            errors.ExifCleanerAdminMalformed,
-            errors.ExifCleanerEmailMissing,
-            errors.ExifCleanerUsernameTooLong,
-            errors.ExifCleanerPasswordMissing
-        ]
+        u = User(
+            username="user1", 
+            email="none@donthave.com",
+            password="xxxx")
         
-        e = user.update(
-            password=None,
-            username='e'*500,
-            email="      ",
-            activated=0.1,
-            admin=object(),
-            joined="aasSasdasd"
-        )
-        
-        self.assertEqual(6, len(e))
-        self.assertTrue(e[0].__class__ in expected)
-        self.assertTrue(e[1].__class__ in expected)
-        self.assertTrue(e[2].__class__ in expected)
-        self.assertTrue(e[3].__class__ in expected)
-        self.assertTrue(e[4].__class__ in expected)
-        self.assertTrue(e[5].__class__ in expected)
-        
+        self.assertEqual(u.username, "user1")
+        self.assertEqual(u.password, "did it")
+        self.assertEqual(u.email, "none@donthave.com")
+        self.assertEqual(u.id, "1234")
+        self.assertEqual(u.admin, False)
+        self.assertEqual(u.activated, False)
+        self.assertEqual(u.enabled, False)
+        self.assertEqual(u.joined, static_date())
     
-    def test_new_user_no_attributes(self):
+    @patch("exifcleaner.user.manager.pbkdf2_sha256.hash", lambda x: "did it")
+    def test_to_redis(self):
         """
-        New user object, no attributes provided.
+        Test typical use case of to_redis() method - no errors.
         """
         
-        current_datetime = udatetime.now()
-        current_datetime_text = udatetime.to_string(current_datetime)
+        u = User(
+            username="user1", 
+            email="none@donthave.com",
+            password="xxxx")
         
-        with patch('exifcleaner.user.user.udatetime.now') as mocked:
-            mocked.return_value = current_datetime
-            
-            user = User()
+        expected = {
+            'email': 'none@donthave.com',
+            'username': "user1",
+            'password': 'did it',
+            'id': '1234',
+            'admin': 0,
+            'activated': 0,
+            'enabled': 0,
+            'joined': '1993-10-26T08:00:00.000000-04:00'
+        }
         
-            user.update()
-        
-            expected = {
-                'password': None,
-                'username': None,
-                'email': None,
-                'key': None,
-                'enabled': 0,
-                'joined': current_datetime_text,
-                'admin': 0,
-                'activated': 0
-            }
-        
-        self.assertEqual(expected, user.dict())
-        
-    def test_dict_proper_values(self):
+        self.assertEqual(u.to_redis(), expected)
+    
+    @patch("exifcleaner.user.manager.pbkdf2_sha256.hash", lambda x: "did it")
+    def test_from_redis(self):
         """
-        Happy-path test - give the User object different from default values, 
-        and make sure they come out correctly when calling dict()
+        Test typical use case of from_redis() method - no errors.
         """
-        now = udatetime.to_string(udatetime.now())
         
-        with patch("exifcleaner.user.user.pbkdf2_sha256.hash") as mocked:
-            mocked.return_value = "hashedpass"
-            
-            user = User()
-            
-            user.update(password="sensiblepass", 
-                        username="bobdobbs",
-                        email="bob@dobbs.com",
-                        activated=True,
-                        admin=True,
-                        joined=now,
-                        enabled=True)
-            
-            expected = {
-                    'password': "hashedpass",
-                    'username': "bobdobbs",
-                    'email': "bob@dobbs.com",
-                    'key': "user:bobdobbs",
-                    'enabled': 1,
-                    'joined': now,
-                    'admin': 1,
-                    'activated': 1
-                }
+        u = User.from_redis({
+            'email': 'none@donthave.com',
+            'username': "user1",
+            'password': 'did it',
+            'id': '1234',
+            'admin': '0',
+            'activated': '0',
+            'enabled': '0',
+            'joined': '1993-10-26T08:00:00.000000-04:00'
+        })
         
-        self.assertEqual(expected, user.dict())
+        self.assertEqual(u.username, "user1")
+        self.assertEqual(u.password, "did it")
+        self.assertEqual(u.email, "none@donthave.com")
+        self.assertEqual(u.id, "1234")
+        self.assertEqual(u.admin, False)
+        self.assertEqual(u.activated, False)
+        self.assertEqual(u.enabled, False)
+        self.assertEqual(u.joined, static_date())
+        
+    def test_changed(self):
+        """
+        Test the changed() method - typical case
+        """
+        u = User(
+            username="user1", 
+            email="none@donthave.com",
+            password="xxxx")
+        
+        # initially nothing has changed
+        self.assertEqual(u.changed(), [])
+        
+        u.update(admin=True, activated=True, username="user2")
+        
+        self.assertEqual(sorted(u.changed()), ['activated', 'admin', 'username'])
+        
+    def test_authenticate_pass(self):
+        """
+        Test the authenticate() method. Valid creds provided.
+        """
+        u = User(
+            username="user1", 
+            email="none@donthave.com",
+            password="xxxx",
+            activated=True)
+        
+        self.assertTrue(u.authenticate("xxxx"))
+        
+    def test_authenticate_fail(self):
+        """
+        Test the authenticate() method. Invalid creds provided.
+        """
+        u = User(
+            username="user1", 
+            email="none@donthave.com",
+            password="xxxx",
+            activated=True)
+        
+        self.assertFalse(u.authenticate("bad!"))        
         

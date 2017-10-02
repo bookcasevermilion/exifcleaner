@@ -1,5 +1,6 @@
 from . import manager, errors
 from webob import Request, Response
+from .. import common
 
 class UserAuthMiddleware:
     def __init__(self, application, redis_url="redis://127.0.0.1:6379", admin=False):
@@ -8,7 +9,7 @@ class UserAuthMiddleware:
     def __call__(self, environ, start_response):
         pass
 
-class UserAPI:
+class UserService(common.BaseService):
     """
     RESTish API for managing users.
     
@@ -16,38 +17,55 @@ class UserAPI:
     
     /users, GET - list users
     /users, POST - add a new user
-    /users/username, PUT - update a user
-    /users/username, GET - get a single user
-    /users/username, DELETE - remove a user
-    /login, POST - validate a user
-    /activate/activation_id, GET - activate the user who has provided credentials
+    /user/username, PUT - update a user
+    /user/username, GET - get a single user
+    /user/username, DELETE - remove a user
+    /login, POST - authenticate a user
     """
     
     def __init__(self, redis_url="redis://127.0.0.1:6379"):
-        self.user_manager = manager.UserManager(redis_url=redis_url)
+        common.BaseService.__init__(self, redis_url=redis_url)
         
-    def __call__(self, environ, start_response):
-        """
-        Routing
-        """
-        request = Request(environ)
-        
-        
-        
+        self.path_map = {
+            re.compile("/user/(?P<username>[^/]+)$"): {
+                "GET": self.get,
+                "DELETE": self.delete,
+                "PUT": self.modify
+            },
+            re.compile("/users/?$"): { 
+                "GET": self.listing,
+                "POST": self.add
+            },
+            re.compile("/login/?$"): {
+                "POST": self.authenticate
+            },
+            re.compile("/reset/?$"): {
+                "GET": self.reset_request
+            },
+            re.compile("/reset/(?P<code>[^/]+)$"): {
+                "POST": self.reset_password
+            }
+        }
         
     def add(self, request):
+         return Response("Adding a new user.")
+    
+    def delete(self, request, username):
+        return Response("Deleting {}".format(username))
+    
+    def modify(self, request, username):
+        return Response("Modifying {}".format(username))
+        
+    def listing(self):
+        return Response("Listing users")
+        
+    def get(self, request, username):
+        return Response("Getting user {}".format(username))
+    
+    def reset_request(self, request):
         pass
     
-    def delete(self, request):
-        pass
-    
-    def activate(self, request):
-        pass
-    
-    def modify(self, request):
-        pass
-    
-    def password_reset(self, request):
+    def password_reset(self, request, code):
         pass
     
     

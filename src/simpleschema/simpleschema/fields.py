@@ -13,7 +13,7 @@ class SchemaField:
         self.default = default
         
         # if a default is given, the field is no longer required.
-        if self.default:
+        if self.default is not None:
             self.required = False
         
         self.type = type
@@ -214,29 +214,67 @@ class DelimitedListField(SchemaField):
         return output
     
         
+class IntegerField(SchemaField):
+    """
+    Field for integer values. Can work from a string.
+    
+    Unique arguments:
+        - min: the integer must be higher than this (negative OK)
+        - max: the integer must be lower than this (negative OK)
+    
+    """
+    def __init__(self, min=None, max=None, **kwargs):
+        self.min = min
+        self.max = max
+        
+        SchemaField.__init__(self, **kwargs)
+    
+    def validator(self, value):
+        if isinstance(value, str):
+            try:
+                value = int(value)
+            except ValueError:
+                raise errors.BadValue()
+        
+        if not isinstance(value, int):
+            raise errors.NotAnInteger()
+        
+        if self.min is not None and value < self.min:
+            raise errors.TooSmall()
+            
+        if self.max is not None and value > self.max:
+            raise errors.TooBig()
+        
+        return value
+        
 class BooleanField(SchemaField):
     """
-    Field for boolean values. Can handle string values and numbers.
+    Represents a True/False value.
     
-    Rules:
-        - If integer: follows python's conventions (0 is False, all others 
-          are True)
-        - If string:
-            '1', 'y', 'yes', 't', 'true' (regardless of case) is True.
-            '0', 'n', 'no', 'f', 'false' (regardless of case) is False.
-    
+    Can take sring input, where the following rules apply:
+        
+        - 'y', 'yes', '1', 't', 'true' are True (case insensative)
+        - 'n', 'no', '0', 'f', 'false' are False (case insensative)
+        
+    Raises simpleschema.errors.BadBoolean if the value doesn't conform
+    to the above rules.
     """
     def validator(self, value):
         if isinstance(value, bool):
             return value
-        elif isinstance(value, int):
-            return bool(value)
-        elif isinstance(value, str):
+        
+        if isinstance(value, str):
             value = value.lower()
             
             if value in ['1', 'y', 'yes', 't', 'true']:
                 return True
             elif value in ['0', 'n', 'no', 'f', 'false']:
                 return False
+            else:
+                raise errors.BadBoolean()
+        elif isinstance(value, int):
+            return bool(value)
         else:
             raise errors.BadBoolean()
+            
+        

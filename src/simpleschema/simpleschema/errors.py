@@ -13,6 +13,11 @@ class NotAString(SchemaError):
     Raised when a string is required, but one is not provided.
     """
     
+class NotAnInteger(SchemaError):
+    """
+    Raised when an integer is required, but one is not provided.
+    """
+    
 class NotASequence(SchemaError):
     """
     Raised when a sequence is expected but one is not provided.
@@ -42,6 +47,16 @@ class TooShort(OutOfBounds):
 class TooLong(OutOfBounds):
     """
     Raised when a value is too long.
+    """
+    
+class TooSmall(OutOfBounds):
+    """
+    Raised when a value is not of sufficient quantity.
+    """
+
+class TooBig(OutOfBounds):
+    """
+    Raised when a value is too large.
     """
 
 class BadBoolean(SchemaError):

@@ -30,7 +30,7 @@ class TestBasicOperation(unittest.TestCase):
         """
         e = englids.Englids()
         
-        self.assertEquals(e(), "RuddierMestizoesMap")
+        self.assertEquals(e(), "RuddierJackknivesMap")
         
     def test_custom_files(self):
         """
@@ -41,7 +41,7 @@ class TestBasicOperation(unittest.TestCase):
             verbs=dict_path("four_entries_proper_nouns"),
             adjectives=dict_path("four_entries_proper_nouns"))
         
-        self.assertEquals(e(), 'BuddyVirgilBobby')
+        self.assertEquals(e(), 'BobbyJulianJulian')
         
     def test_cycling(self):
         """
@@ -53,12 +53,12 @@ class TestBasicOperation(unittest.TestCase):
             verbs=dict_path("four_entries_proper_nouns"),
             adjectives=dict_path("four_entries_proper_nouns"))
         
+        self.assertEquals(e(), 'BobbyJulianJulian')
+        self.assertEquals(e(), 'VirgilBobbyBuddy')
         self.assertEquals(e(), 'BuddyVirgilBobby')
-        self.assertEquals(e(), 'VirgilJulianVirgil')
-        self.assertEquals(e(), 'BobbyBuddyBuddy')
-        self.assertEquals(e(), 'JulianBobbyJulian')
-        self.assertEquals(e(), 'BuddyVirgilBobby')
-        self.assertEquals(e(), 'VirgilJulianVirgil')
+        self.assertEquals(e(), 'JulianBuddyVirgil')
+        self.assertEquals(e(), 'BobbyJulianJulian')
+        self.assertEquals(e(), 'VirgilBobbyBuddy')
         
     def test_stats(self):
         """
@@ -79,7 +79,7 @@ class TestBasicOperation(unittest.TestCase):
         
         self.assertEqual(e.stats, expected)
         
-        expected['last'] = 'BuddyVirgilBobby'
+        expected['last'] = 'BobbyJulianJulian'
         
         e()
         
