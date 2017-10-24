@@ -6,29 +6,30 @@ The code must be redeemed by the user provided when created.
 """
 
 import redis
+import os
 import udatetime
 import datetime
+import simpleschema
 from .. import user
 from .. import util
+from ..common.manager import BaseManager
 from . import errors
 
+schema = simpleschema.Schema({
+    'user': simpleschema.fields.StringField(),
+    'used': simpleschema.fields.BooleanField(default=False),
+    'expires': simpleschema.fields.IntegerField(default=datetime.timedelta(hours=1).seconds),
+    'code': simpleschema.fields.StringField(default=util.random_id),
+    'created': simpleschema.fields.RFC3339DateField(default=udatetime.now)
+})
+
 class Code:
-    def __init__(self, user, code=None, created=None, expires=None, used=False):
-        self.user = user
-        self.used = used
+    def __init__(self, skip_check=False, **attributes):
+        if not skip_check:
+            attributes = schema.check(attributes)
         
-        if created is None:
-            created = udatetime.now()
-        
-        if expires is None:
-            expires = datetime.timedelta(hours=1).seconds
-            
-        if code is None:
-            code = util.random_id()
-            
-        self.code = code
-        self.created = created
-        self.expires = expires
+        for key, val in attributes.items():
+            setattr(self, key, val)
     
     @classmethod
     def prefix(cls, code):
@@ -53,7 +54,7 @@ class Code:
         code = data['code']
         used = util.bool_from_string(data['used'])
         
-        obj = cls(user=user, code=code, created=created, expires=expires)
+        obj = cls(user=user, code=code, created=created, expires=expires, used=used)
         
         return obj
         
@@ -85,15 +86,17 @@ class Code:
             'used': self.used
         }
 
-def CodeManager:
+class CodeManager(BaseManager):
     index = "index:code:by-date"
     
     def __init__(self, redis_url="redis://127.0.0.1:6379"):
         """
-        redis_url, string: connection info for redis.
+        redis_url, string: connection info for redis. Can be overridden with the
+        EXIFCLEANER_REDIS_URL variable.
         """
-        self.redis = redis.StrictRedis.from_url(redis_url, decode_responses=True, encoding='utf-8')
-        self.users = user.manager.UserManager(redis_url=redis_url)
+        BaseManager.__init__(self, redis_url)
+        
+        self.users = user.manager.UserManager(redis_url=self.redis_url)
         
     def cleanup(self, id):
         """
@@ -160,7 +163,7 @@ def CodeManager:
             pipe.lrem(self.index, 0, id)
             pipe.execute()
         
-    def use(self, id, username, password=None):):
+    def use(self, id, username, password=None):
         """
         Use the given code. Verify the user's password if desired.
         """

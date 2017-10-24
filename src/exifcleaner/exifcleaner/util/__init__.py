@@ -7,8 +7,6 @@ import pprint
 import random
 import udatetime
 import itertools
-from . import web
-from . import pagination
 
 def to_base(num, alpha):
     """

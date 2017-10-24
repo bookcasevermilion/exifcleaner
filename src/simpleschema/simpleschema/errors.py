@@ -1,7 +1,15 @@
 class SchemaError(Exception):
     """
-    Base error for all schema problems.
+    Rasied by Schema.check() - container of multiple error objects.
     """
+    def __init__(self, **errors):
+        self.errors = errors
+        
+    def __str__(self):
+        return str(self.errors)
+        
+    def __repr__(self):
+        return "<{} ({})>".format(self.__class__.__name__, str(self))
         
 class MissingValue(SchemaError):
     """
@@ -32,6 +40,12 @@ class NotAnEmail(SchemaError):
 class BadType(SchemaError):
     """
     Raised when the type of the provided value is incorrect.
+    """
+    
+class MalformedInteger(SchemaError):
+    """
+    Raised when an integer cannot be processed from a string, or is otherwise
+    improperly formatted.
     """
 
 class OutOfBounds(SchemaError):

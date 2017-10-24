@@ -154,7 +154,7 @@ class TestBasicSchema(TestSchemaBase):
         """
         schema = self.schema()
         
-        self.assertRaises(simpleschema.SchemaError, schema.check, {})
+        self.assertRaises(simpleschema.errors.SchemaError, schema.check, {})
     
     def test_check_method_errors_verify(self):
         """
@@ -170,7 +170,7 @@ class TestBasicSchema(TestSchemaBase):
         
         try:
             schema.check({})
-        except simpleschema.SchemaError as e:
+        except simpleschema.errors.SchemaError as e:
             self.compare_errors(e.errors, expected)
 
 class TestRigidSchema(TestSchemaBase):
@@ -571,4 +571,12 @@ class TestBooleanField(TestSchemaFieldBase):
         self.assertEqual(field(), False)
         
       
-    
+class TestStringField(TestSchemaFieldBase):
+    def test_empty_string(self):
+        """
+        An empty string "" should either raise MissingValue or
+        TooSmall.
+        """
+        field = simpleschema.fields.StringField()
+        
+        self.assertRaises(simpleschema.errors.TooShort, field, "")

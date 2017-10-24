@@ -54,7 +54,7 @@ class SchemaField:
         return value
 
 class StringField(SchemaField):
-    def __init__(self, min=0, max=255, **kwargs):
+    def __init__(self, min=1, max=255, **kwargs):
         self.min = min
         self.max = max
         SchemaField.__init__(self, **kwargs)
@@ -234,7 +234,7 @@ class IntegerField(SchemaField):
             try:
                 value = int(value)
             except ValueError:
-                raise errors.BadValue()
+                raise errors.MalformedInteger()
         
         if not isinstance(value, int):
             raise errors.NotAnInteger()

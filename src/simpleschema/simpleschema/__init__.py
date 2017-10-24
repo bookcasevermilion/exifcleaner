@@ -8,19 +8,6 @@ from . import unset
 from . import errors
 from . import fields
 
-class SchemaError(Exception):
-    """
-    Rasied by Schema.check() - container of multiple error objects.
-    """
-    def __init__(self, **errors):
-        self.errors = errors
-        
-    def __str__(self):
-        return str(self.errors)
-        
-    def __repr__(self):
-        return "<{} ({})>".format(self.__class__.__name__, str(self))
-
 class Schema:
     def __init__(self, fields=None):
         self._fields = {}
@@ -54,17 +41,17 @@ class Schema:
         """
         Raise SchemaError containing all found errors, if any occur.
         """
-        errors = {}
+        _errors = {}
         output = {}
         
         for name, result in self.validate(data):
             if isinstance(result, Exception):
-                errors[name] = result
+                _errors[name] = result
             else:
                 output[name] = result
                 
-        if errors:
-            raise SchemaError(**errors)
+        if _errors:
+            raise errors.SchemaError(**_errors)
             
         return output
         

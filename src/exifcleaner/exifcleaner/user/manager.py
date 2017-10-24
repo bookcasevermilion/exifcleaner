@@ -8,6 +8,7 @@ import datetime
 from passlib.hash import pbkdf2_sha256
 from . import errors
 from ..util import UNSET, string_to_score, random_id
+from ..common.manager import BaseManager
 import simpleschema
 
 USER_INDEX_KEY = "index:users-main"
@@ -179,19 +180,19 @@ class User:
     def __repr__(self):
         return "<{} ({})>".format(self.__class__.__name__, str(self))
 
-class UserManager:
+class UserManager(BaseManager):
     """
     CRUD for working with users. Most methods return a User object. 
     """
     
     def __init__(self, redis_url="redis://127.0.0.1:6379"):
-        self.connection = redis.StrictRedis.from_url(redis_url, decode_responses=True, encoding='utf-8')
+        BaseManager.__init__(self, redis_url)
         
     def save(self, user):
         """
         Save a user object.
         """
-        with self.connection.pipeline() as pipe:
+        with self.redis.pipeline() as pipe:
             pipe.hmset(user.key, user.to_redis())
             if "username" in user.changed():
                 pipe.hdel(USER_INDEX_KEY, user.old("username"))
@@ -207,7 +208,7 @@ class UserManager:
         if "id" not in attributes:
             attributes['id'] = random_id()
         
-        data = add_schema.validate(attributes)
+        data = schema.check(attributes)
         
         user = User(**data)
         
@@ -222,10 +223,10 @@ class UserManager:
         """
         Retrieve a user from the database, by username.
         """
-        user_key = self.connection.hmget(USER_INDEX_KEY, username)[0]
+        user_key = self.redis.hmget(USER_INDEX_KEY, username)[0]
         
         if user_key:
-            data = self.connection.hgetall(user_key)
+            data = self.redis.hgetall(user_key)
             
             if data:
                 return User.from_redis(data)
@@ -238,7 +239,7 @@ class UserManager:
         """
         Return True if the username is in the system. False if not.
         """
-        return bool(self.connection.hexists(USER_INDEX_KEY, username))
+        return bool(self.redis.hexists(USER_INDEX_KEY, username))
     
     def authenticate(self, username, password):
         """
@@ -265,7 +266,7 @@ class UserManager:
         """
         user = self.get(username)
         
-        with connection.pipeline() as pipe:
+        with self.redis.pipeline() as pipe:
             pipe.delete(user.key)
             pipe.hdel(USER_INDEX_KEY, user.username)
             pipe.zrem(USERS_BY_USERNAME, user.key)
@@ -294,11 +295,11 @@ class UserManager:
         """
         Return a listing of users.
         """
-        users = self.connection.zrange(USERS_BY_USERNAME, start, stop)
+        users = self.redis.zrange(USERS_BY_USERNAME, start, stop)
         
         output = []
         
-        with self.connection.pipeline() as pipe:
+        with self.redis.pipeline() as pipe:
             for user_key in users:
                 pipe.hgetall(user_key)
                 
