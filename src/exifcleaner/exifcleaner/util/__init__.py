@@ -76,7 +76,7 @@ def datetime_from_string(value):
     else:
         return value
 
-def random_id(alpha=None, seed=None):
+def random_id(alpha=None):
     """
     Generate a random, non-decodable ID.
     
@@ -84,8 +84,6 @@ def random_id(alpha=None, seed=None):
     """
     if alpha is None:
         alpha = DEFAULT_ALPHABET
-    
-    random.seed(seed)
     
     # shuffle the alphabet
     alpha = random.sample(alpha, len(alpha))

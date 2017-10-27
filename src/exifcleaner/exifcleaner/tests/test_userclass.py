@@ -57,7 +57,7 @@ class TestUserClass(unittest.TestCase):
         self.assertEqual(u.id, "1234")
         self.assertEqual(u.admin, False)
         self.assertEqual(u.activated, False)
-        self.assertEqual(u.enabled, False)
+        self.assertEqual(u.enabled, True)
         self.assertEqual(u.joined, static_date())
     
     @patch("exifcleaner.user.manager.pbkdf2_sha256.hash", lambda x: "did it")
@@ -78,7 +78,7 @@ class TestUserClass(unittest.TestCase):
             'id': '1234',
             'admin': 0,
             'activated': 0,
-            'enabled': 0,
+            'enabled': 1,
             'joined': '1993-10-26T08:00:00.000000-04:00'
         }
         

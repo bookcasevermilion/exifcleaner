@@ -11,6 +11,11 @@ class SchemaError(Exception):
     def __repr__(self):
         return "<{} ({})>".format(self.__class__.__name__, str(self))
         
+class Malformed(SchemaError):
+    """
+    Generic error when a value is not correctly formatted.
+    """
+        
 class MissingValue(SchemaError):
     """
     Raised when a value is not provided.

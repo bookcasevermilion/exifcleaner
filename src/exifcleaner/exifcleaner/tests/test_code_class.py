@@ -2,20 +2,24 @@
 Tests For The Code Manager - Code class
 """
 import pytest
+import random
 import udatetime, datetime
 from exifcleaner import util
 import simpleschema
 
-@pytest.fixture(autouse=True)
-def fixate_randomness(monkeypatch):
+@pytest.fixture()
+def fixate_now(monkeypatch):
+    monkeypatch.setattr("udatetime.now", lambda: udatetime.from_string('1993-10-26T08:00:00-04:00'))
+
+@pytest.fixture()
+def fixate_randomness():
     """
     Set well-known values for time and ramdomness-sensative
     functions.
     """
-    monkeypatch.setattr("udatetime.now", lambda: udatetime.from_string('1993-10-26T08:00:00-04:00'))
-    monkeypatch.setattr(util, "random_id", lambda: "test-code-1")
+    random.seed(200)
 
-def test_basic_construction_no_params():
+def test_basic_construction_no_params(fixate_now, fixate_randomness):
     """
     Ensure typical case construction of a Code object functions properly - 
     all default parameters.
@@ -24,11 +28,11 @@ def test_basic_construction_no_params():
     c = Code(user="testuser1")
     
     assert c.user == "testuser1"
-    assert c.code == "test-code-1"
+    assert c.code == "hODPLE"
     assert c.created == udatetime.from_string('1993-10-26T08:00:00-04:00')
     assert c.expires == 3600
     assert c.used is False
-    assert c.key == "code:test-code-1"
+    assert c.key == "code:hODPLE"
     assert c.expires_at() == udatetime.from_string('1993-10-26T09:00:00-04:00')
     
 def test_from_redis():
@@ -55,7 +59,6 @@ def test_from_redis():
     assert c.key == "code:code-1-2-3"
     assert c.expires_at() == udatetime.from_string('2010-11-03T10:57:03.000000-04:00')
     
-import pytest
 @pytest.mark.parametrize("test_input,error", [
     ({'user':""}, {'user': simpleschema.errors.TooShort}),
     ({'user':453}, {'user': simpleschema.errors.NotAString}),

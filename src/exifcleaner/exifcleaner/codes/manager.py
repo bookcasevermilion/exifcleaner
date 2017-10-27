@@ -12,6 +12,7 @@ import datetime
 import simpleschema
 from .. import user
 from .. import util
+from ..util import random_id
 from ..common.manager import BaseManager
 from . import errors
 
@@ -19,7 +20,7 @@ schema = simpleschema.Schema({
     'user': simpleschema.fields.StringField(),
     'used': simpleschema.fields.BooleanField(default=False),
     'expires': simpleschema.fields.IntegerField(default=datetime.timedelta(hours=1).seconds),
-    'code': simpleschema.fields.StringField(default=util.random_id),
+    'code': simpleschema.fields.StringField(default=random_id),
     'created': simpleschema.fields.RFC3339DateField(default=udatetime.now)
 })
 

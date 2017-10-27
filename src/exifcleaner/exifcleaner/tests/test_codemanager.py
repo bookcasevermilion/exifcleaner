@@ -2,6 +2,7 @@
 Tests For The Code Manager - The Code Manager
 """
 import pytest
+import random
 import udatetime, datetime
 from exifcleaner import util
 import simpleschema
@@ -12,15 +13,18 @@ from . import util as testutil
 
 pytestmark = pytest.mark.skipif(not testutil.check_redis(), reason="Redis must be available. Set EXIFCLEANER_REDIS_URL to change from default local server")
 
-@pytest.fixture(autouse=True)
-def fixate_randomness(monkeypatch):
+@pytest.fixture()
+def fixate_now(monkeypatch):
+    monkeypatch.setattr("udatetime.now", lambda: udatetime.from_string('1993-10-26T08:00:00-04:00'))
+
+@pytest.fixture()
+def fixate_randomness():
     """
     Set well-known values for time and ramdomness-sensative
     functions.
     """
-    monkeypatch.setattr("udatetime.now", lambda: udatetime.from_string('1989-10-23T08:00:00-06:00'))
-    monkeypatch.setattr(util, "random_id", lambda: "test-xxx-2")
-    
+    random.seed(200)
+
 @pytest.fixture(scope="module")
 def fixture_initial_data():
     """
@@ -42,10 +46,9 @@ def fixture_initial_data():
     
     yield users
     
-    manager.delete("activeuser")
-    manager.delete("inactiveuser")
+    manager.redis.flushdb()
     
-def test_add_happy_path(fixture_initial_data):
+def test_add_happy_path(fixture_initial_data, fixate_randomness, fixate_now):
     """
     Add a new code using the manager. Typical use case. 
     """
@@ -53,12 +56,15 @@ def test_add_happy_path(fixture_initial_data):
     
     manager = CodeManager()
     
-    c = manager.new("activeuser")
+    manager.new("activeuser")
     
-    assert c.user == fixture_initial_data['active'].id
-    assert c.code == "test-xxx-2"
-    assert c.created == udatetime.from_string('1989-10-23T08:00:00-06:00')
-    assert c.expires == 3600
-    assert c.used is False
-    assert c.key == "code:test-xxx-2"
-    assert c.expires_at() == udatetime.from_string('1989-10-23T09:00:00-06:00')
+    code = manager.get("activeuser")
+    
+    assert code.user == fixture_initial_data['active'].id
+    assert code.code == "hODPLE"
+    assert code.created == udatetime.from_string('1993-10-26T08:00:00-04:00')
+    assert code.expires == 3600
+    assert code.used is False
+    assert code.key == "code:hODPLE"
+    assert code.expires_at() == udatetime.from_string('1993-10-26T09:00:00-04:00')
+    

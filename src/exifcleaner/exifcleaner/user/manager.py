@@ -13,14 +13,24 @@ import simpleschema
 
 USER_INDEX_KEY = "index:users-main"
 USERS_BY_USERNAME = "index:users:by-username"
+BEGINNING_OF_TIME = udatetime.from_string("2016-01-01T00:00:00")
+
+class UsernameField(simpleschema.fields.StringField):
+    def validator(self, value):
+        value = simpleschema.fields.StringField.validator(self, value)
+        
+        if "::" in value:
+            raise simpleschema.errors.Malformed()
+            
+        return value
 
 schema = simpleschema.Schema({
     'email': simpleschema.fields.EmailField(),
     'password': simpleschema.fields.StringField(),
-    'username': simpleschema.fields.StringField(),
+    'username': UsernameField(),
     'admin': simpleschema.fields.BooleanField(default=False),
     'activated': simpleschema.fields.BooleanField(default=False),
-    'enabled': simpleschema.fields.BooleanField(default=False),
+    'enabled': simpleschema.fields.BooleanField(default=True),
     'id': simpleschema.fields.StringField(default=random_id),
     'joined': simpleschema.fields.RFC3339DateField(default=udatetime.now)
 })
@@ -88,6 +98,23 @@ class User:
         return changed
     
     @property
+    def sortby(self):
+        """
+        Return a value by which to sort users.
+        """
+        return "{}::{}".format(self.username, self.key)
+    
+    @property
+    def old_sortby(self):
+        """
+        Return the previous value used to sort users.
+        """
+        if "username" in self.changed():
+            return "{}::{}".format(self.old("username"), self.key)
+        else:
+            return self.sortby
+    
+    @property
     def key(self):
         """
         Getter to prefix the user ID for use as a redis key.
@@ -114,7 +141,7 @@ class User:
         """
         Update and verify attributes supplied as keyword arguments.
         """
-        data = modify_schema.validict(attributes)
+        data = modify_schema.check(attributes)
         self._update(**data)
     
     @classmethod
@@ -157,6 +184,14 @@ class User:
         
         return output
         
+    def valid(self):
+        """
+        Returns True if the user is OK to log in. 
+        
+        Currently this means self.activated and self.enabled are True.
+        """
+        return self.enabled and self.activated
+        
     def authenticate(self, password, bypass_activation=False):
         """
         Return True if the plaintext password matches the password
@@ -165,7 +200,7 @@ class User:
         Set bypass_activation to True to allow the user to authenticate
         so they can activate their account.
         """
-        if not self.activated and not bypass_activation:
+        if not self.valid() and not bypass_activation:
             return False
         
         return bool(pbkdf2_sha256.verify(password, self.password))
@@ -196,8 +231,12 @@ class UserManager(BaseManager):
             pipe.hmset(user.key, user.to_redis())
             if "username" in user.changed():
                 pipe.hdel(USER_INDEX_KEY, user.old("username"))
-                
-            pipe.zadd(USERS_BY_USERNAME, string_to_score(user.username), user.key)
+                pipe.zrem(USERS_BY_USERNAME, user.old_sortby)
+            
+            delta = udatetime.now()-BEGINNING_OF_TIME
+            score = delta.seconds
+            
+            pipe.zadd(USERS_BY_USERNAME, score, user.sortby)
             pipe.hset(USER_INDEX_KEY, user.username, user.key)
             pipe.execute()
         
@@ -227,6 +266,9 @@ class UserManager(BaseManager):
         
         if user_key:
             data = self.redis.hgetall(user_key)
+            
+            # TODO: raise a different error if the user can't be found because
+            #       the key in the index is not there, so we can log it.
             
             if data:
                 return User.from_redis(data)
@@ -260,6 +302,13 @@ class UserManager(BaseManager):
         user = self.modify(username, activated=True)
         return user
     
+    def disable(self, username):
+        """
+        Disable a user.
+        """
+        user = self.modify(username, disabled=True)
+        return user
+    
     def delete(self, username):
         """
         Remove a user from the database.
@@ -269,7 +318,7 @@ class UserManager(BaseManager):
         with self.redis.pipeline() as pipe:
             pipe.delete(user.key)
             pipe.hdel(USER_INDEX_KEY, user.username)
-            pipe.zrem(USERS_BY_USERNAME, user.key)
+            pipe.zrem(USERS_BY_USERNAME, user.sortby)
             pipe.execute()
             
         return None
@@ -291,22 +340,48 @@ class UserManager(BaseManager):
         
         return existing
         
+    def users_by_date_added(self, start=0, stop=-1):
+        """
+        Return a listing of users, by the order they were created.
+        """
+        users = self.redis.zrangebyscore(USERS_BY_USERNAME, "-inf", "+inf", start, stop)
+        
+        return self._users(users)
+        
+    def users_by_username(self, start=0, stop=-1):
+        """
+        Return a listing of users, sorted by username.
+        """
+        users = self.redis.zrangebylex(USERS_BY_USERNAME, "-", "+", start, stop)
+        
+        return self._users(users)
+        
     def users(self, start=0, stop=-1):
+        return self.users_by_date_added(start, stop)
+        
+    def _users(self, users):
         """
-        Return a listing of users.
+        Helper for returning a list of users.
+        
+        users is a list of [username]::[key] strings.
         """
-        users = self.redis.zrange(USERS_BY_USERNAME, start, stop)
         
         output = []
         
         with self.redis.pipeline() as pipe:
             for user_key in users:
-                pipe.hgetall(user_key)
+                username, key = user_key.split("::", maxsplit=1)
+                
+                pipe.hgetall(key)
                 
             results = pipe.execute()
             
-            for result in results:
-                output.append(User.from_redis(result))
+            for index, result in enumerate(results):
+                if not result:
+                    #TODO: this should't be, but can happen, do something.
+                    output.append(User(skip_check=True))
+                else:
+                    output.append(User.from_redis(result))
         
         return output
         
